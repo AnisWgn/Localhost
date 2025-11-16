@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C:\> Directory Listing</title>
+    <title>Terminal - localhost</title>
     <style>
         * {
             margin: 0;
@@ -16,35 +16,39 @@
             color: #33FF33;
             font-family: 'Consolas', 'Courier New', 'Lucida Console', monospace;
             font-size: 14px;
-            overflow-x: hidden;
-            cursor: default;
+            line-height: 1.6;
+            overflow-x: auto;
+            min-height: 100vh;
+            position: relative;
         }
 
-        /* Canvas pour la pluie numérique en arrière-plan */
-        #matrix-canvas {
+        /* Canvas pour la pluie numérique */
+        #matrix {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: -1;
-            opacity: 0.15;
+            opacity: 0.05;
+            z-index: 0;
+            pointer-events: none;
         }
 
         /* Conteneur principal */
         #terminal {
-            padding: 20px;
             position: relative;
             z-index: 1;
+            padding: 20px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
-        pre {
-            margin: 0;
-            white-space: pre;
-            text-shadow: 0 0 2px rgba(51, 255, 51, 0.3);
+        /* Effet de lueur subtile CRT */
+        #terminal-content {
+            text-shadow: 0 0 1px #33FF33;
         }
 
-        /* Style des liens */
+        /* Liens */
         a {
             color: #33FF33;
             text-decoration: none;
@@ -55,185 +59,257 @@
             text-decoration: underline;
         }
 
-        a.dir-link:hover {
-            color: #FFFFFF;
-        }
-
         /* Curseur clignotant */
         .cursor {
             display: inline-block;
+            width: 10px;
+            height: 18px;
             background-color: #33FF33;
-            animation: blink 1s step-start infinite;
+            animation: blink 1s infinite;
+            vertical-align: text-bottom;
         }
 
         @keyframes blink {
-            0%, 50% {
-                opacity: 1;
-            }
-            50.1%, 100% {
-                opacity: 0;
-            }
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
         }
 
-        /* Style pour l'art ASCII */
+        /* Animation de frappe */
+        .hidden {
+            display: none;
+        }
+
+        /* ASCII Art */
         .ascii-art {
             color: #00FF00;
+            margin-bottom: 20px;
+            font-size: 12px;
             line-height: 1.2;
+        }
+
+        /* Header de commande */
+        .command-line {
+            color: #FFFFFF;
             margin-bottom: 10px;
         }
 
-        /* Style pour les sections de la liste */
+        /* Colonnes alignées */
         .file-entry {
-            display: block;
+            display: inline-block;
+            width: 100%;
         }
     </style>
 </head>
 <body>
-    <!-- Canvas pour l'effet Matrix -->
-    <canvas id="matrix-canvas"></canvas>
-
-    <!-- Terminal principal -->
+    <canvas id="matrix"></canvas>
     <div id="terminal">
-        <pre id="output"></pre><span class="cursor">█</span>
+        <pre id="terminal-content" class="hidden"></pre>
+        <span class="cursor" id="cursor"></span>
     </div>
 
     <script>
-        // ============================================
-        // EFFET PLUIE NUMÉRIQUE (MATRIX BACKGROUND)
-        // ============================================
-        const canvas = document.getElementById('matrix-canvas');
+        // Pluie numérique en arrière-plan
+        const canvas = document.getElementById('matrix');
         const ctx = canvas.getContext('2d');
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        const katakana = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
-        const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        const alphabet = katakana + latin;
+        const matrix = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789@#$%^&*()*&^%+-/~{[|`]}";
+        const matrixArray = matrix.split("");
 
-        const fontSize = 14;
+        const fontSize = 10;
         const columns = canvas.width / fontSize;
 
-        const rainDrops = [];
-        for (let x = 0; x < columns; x++) {
-            rainDrops[x] = Math.random() * canvas.height / fontSize;
+        const drops = [];
+        for(let x = 0; x < columns; x++) {
+            drops[x] = Math.floor(Math.random() * -100);
         }
 
         function drawMatrix() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             ctx.fillStyle = '#0F0';
             ctx.font = fontSize + 'px monospace';
 
-            for (let i = 0; i < rainDrops.length; i++) {
-                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
-                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+            for(let i = 0; i < drops.length; i++) {
+                const text = matrixArray[Math.floor(Math.random() * matrixArray.length)];
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
 
-                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                    rainDrops[i] = 0;
+                if(drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
                 }
-                rainDrops[i]++;
+                drops[i]++;
             }
         }
 
-        setInterval(drawMatrix, 50);
+        setInterval(drawMatrix, 35);
 
-        // Redimensionnement du canvas
+        // Redimensionner le canvas
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         });
 
-        // ============================================
-        // SIMULATION DU CONTENU DU TERMINAL
-        // ============================================
-        
-        // Art ASCII du logo
-        const asciiLogo = `
-   ██████╗███╗   ███╗██████╗     ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗     
-  ██╔════╝████╗ ████║██╔══██╗    ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║     
-  ██║     ██╔████╔██║██║  ██║       ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║███████║██║     
-  ██║     ██║╚██╔╝██║██║  ██║       ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██╔══██║██║     
-  ╚██████╗██║ ╚═╝ ██║██████╔╝       ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║███████╗
-   ╚═════╝╚═╝     ╚═╝╚═════╝        ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-`;
+        // Données simulées des fichiers (remplacer par des données réelles en PHP)
+        const fileSystem = {
+            currentPath: "C:\\xampp\\htdocs",
+            entries: [
+                { type: 'dir', name: '..', size: '', date: '01/01/2024  12:00' },
+                { type: 'dir', name: 'admin', size: '', date: '15/11/2024  09:30' },
+                { type: 'dir', name: 'assets', size: '', date: '20/11/2024  14:15' },
+                { type: 'dir', name: 'backup', size: '', date: '10/11/2024  08:45' },
+                { type: 'dir', name: 'config', size: '', date: '22/11/2024  16:20' },
+                { type: 'dir', name: 'database', size: '', date: '18/11/2024  11:00' },
+                { type: 'dir', name: 'includes', size: '', date: '21/11/2024  13:45' },
+                { type: 'dir', name: 'logs', size: '', date: '23/11/2024  17:30' },
+                { type: 'dir', name: 'modules', size: '', date: '19/11/2024  10:15' },
+                { type: 'dir', name: 'public', size: '', date: '24/11/2024  09:00' },
+                { type: 'dir', name: 'templates', size: '', date: '16/11/2024  15:30' },
+                { type: 'file', name: '.htaccess', size: '1.2 KB', date: '20/11/2024  10:00' },
+                { type: 'file', name: 'composer.json', size: '2.5 KB', date: '15/11/2024  14:30' },
+                { type: 'file', name: 'config.php', size: '4.8 KB', date: '22/11/2024  09:15' },
+                { type: 'file', name: 'database.sql', size: '156.3 KB', date: '18/11/2024  16:45' },
+                { type: 'file', name: 'favicon.ico', size: '15.1 KB', date: '10/11/2024  11:20' },
+                { type: 'file', name: 'functions.php', size: '23.7 KB', date: '21/11/2024  13:00' },
+                { type: 'file', name: 'LICENSE', size: '1.1 KB', date: '01/11/2024  08:00' },
+                { type: 'file', name: 'login.php', size: '8.9 KB', date: '23/11/2024  15:15' },
+                { type: 'file', name: 'logout.php', size: '2.1 KB', date: '23/11/2024  15:30' },
+                { type: 'file', name: 'README.md', size: '5.6 KB', date: '05/11/2024  12:00' },
+                { type: 'file', name: 'robots.txt', size: '0.8 KB', date: '08/11/2024  09:45' },
+                { type: 'file', name: 'style.css', size: '45.2 KB', date: '24/11/2024  10:30' }
+            ]
+        };
 
-        // Simulation du contenu du répertoire
-        const terminalContent = `${asciiLogo}
- Volume dans le lecteur C est System
- Le numéro de série du volume est 4E2A-B8F1
-
- Répertoire de C:\\xampp\\htdocs
-
-12/01/2025  14:32    <DIR>          .
-12/01/2025  14:32    <DIR>          <a href="../" class="dir-link">..</a>
-15/12/2024  09:15    <DIR>          <a href="assets/" class="dir-link">assets</a>
-08/01/2025  16:42    <DIR>          <a href="config/" class="dir-link">config</a>
-22/11/2024  11:28    <DIR>          <a href="css/" class="dir-link">css</a>
-03/01/2025  13:55    <DIR>          <a href="database/" class="dir-link">database</a>
-18/12/2024  10:20    <DIR>          <a href="images/" class="dir-link">images</a>
-05/01/2025  17:30    <DIR>          <a href="js/" class="dir-link">js</a>
-29/12/2024  08:45    <DIR>          <a href="scripts/" class="dir-link">scripts</a>
-11/01/2025  12:10    <DIR>          <a href="uploads/" class="dir-link">uploads</a>
-10/01/2025  15:22             4 256 <a href="config.php">config.php</a>
-12/01/2025  14:32             8 192 <a href="database.sql">database.sql</a>
-08/01/2025  09:47            12 458 <a href="functions.php">functions.php</a>
-15/12/2024  16:55             2 048 <a href="header.php">header.php</a>
-12/01/2025  11:20            15 872 <a href="index.php">index.php</a>
-07/01/2025  13:33             6 144 <a href="login.php">login.php</a>
-22/12/2024  10:15             3 584 <a href="logout.php">logout.php</a>
-05/01/2025  14:28             9 216 <a href="README.md">README.md</a>
-18/12/2024  08:50             5 632 <a href="style.css">style.css</a>
-              9 fichier(s)           67 402 octets
-             10 Rép(s)  125 847 552 000 octets libres
-
-C:\\xampp\\htdocs> `;
-
-        // ============================================
-        // EFFET MACHINE À ÉCRIRE
-        // ============================================
-        const output = document.getElementById('output');
-        let charIndex = 0;
-        const typingSpeed = 8; // Millisecondes par caractère
-
-        function typeWriter() {
-            if (charIndex < terminalContent.length) {
-                const char = terminalContent.charAt(charIndex);
-                
-                // Insérer le caractère (en préservant le HTML pour les liens)
-                if (char === '<') {
-                    // Trouver la balise complète
-                    const closeTag = terminalContent.indexOf('>', charIndex);
-                    const tag = terminalContent.substring(charIndex, closeTag + 1);
-                    output.innerHTML += tag;
-                    charIndex = closeTag + 1;
+        // Formater la liste des fichiers
+        function formatFileList() {
+            let output = '';
+            
+            // Séparer les dossiers et les fichiers
+            const dirs = fileSystem.entries.filter(e => e.type === 'dir');
+            const files = fileSystem.entries.filter(e => e.type === 'file');
+            
+            // Header de la liste
+            output += '\n Le volume dans le lecteur C n\'a pas de nom.\n';
+            output += ' Le numéro de série du volume est 4E9F-1A2B\n\n';
+            output += ' Répertoire de ' + fileSystem.currentPath + '\n\n';
+            
+            // Afficher les dossiers
+            dirs.forEach(dir => {
+                const dateStr = dir.date.padEnd(20);
+                const typeStr = '<DIR>'.padEnd(15);
+                if (dir.name === '..') {
+                    output += `${dateStr}${typeStr}<a href="#" onclick="navigateUp(); return false;">${dir.name}</a>\n`;
                 } else {
-                    output.innerHTML += char;
-                    charIndex++;
+                    output += `${dateStr}${typeStr}<a href="#" onclick="navigateToDir('${dir.name}'); return false;">${dir.name}</a>\n`;
                 }
-                
-                // Auto-scroll vers le bas
-                window.scrollTo(0, document.body.scrollHeight);
-                
-                // Vitesse variable pour plus de réalisme
-                const speed = char === '\n' ? typingSpeed * 2 : typingSpeed;
-                setTimeout(typeWriter, speed);
-            }
+            });
+            
+            // Afficher les fichiers
+            files.forEach(file => {
+                const dateStr = file.date.padEnd(20);
+                const sizeStr = file.size.padStart(15);
+                output += `${dateStr}${sizeStr} <a href="#" onclick="openFile('${file.name}'); return false;">${file.name}</a>\n`;
+            });
+            
+            // Footer avec statistiques
+            const totalFiles = files.length;
+            const totalDirs = dirs.length - 1; // Exclure '..'
+            output += `\n              ${totalFiles} fichier(s)`;
+            output += `\n              ${totalDirs} répertoire(s)`;
+            output += '\n              2,147,483,648 octets libres\n';
+            
+            return output;
         }
 
-        // Démarrer l'animation après un court délai
-        setTimeout(typeWriter, 500);
+        // ASCII Art
+        const asciiArt = `
+╔══════════════════════════════════════════════════════════════════════════╗
+║                                                                          ║
+║  ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗          ║
+║  ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║          ║
+║     ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║███████║██║          ║
+║     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██╔══██║██║          ║
+║     ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║███████╗     ║
+║     ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝     ║
+║                                                                          ║
+║                    [ SYSTEM ACCESS GRANTED ]                            ║
+║                    [ ROOT PRIVILEGES ACTIVE ]                           ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+`;
 
-        // ============================================
-        // EFFETS SONORES (OPTIONNEL - COMMENTÉ)
-        // ============================================
-        // Si vous voulez ajouter un son de frappe clavier:
-        /*
-        const keySound = new Audio('data:audio/wav;base64,UklGRhYAAABXQVZFZm10...');
-        keySound.volume = 0.1;
-        // Jouer le son à chaque caractère dans typeWriter()
-        */
+        // Contenu complet du terminal
+        const fullContent = asciiArt + '\n' + fileSystem.currentPath + '> dir' + formatFileList();
+
+        // Machine à écrire
+        function typeWriter() {
+            const terminal = document.getElementById('terminal-content');
+            const cursor = document.getElementById('cursor');
+            terminal.classList.remove('hidden');
+            
+            let index = 0;
+            const speed = 5; // Vitesse de frappe en ms
+            
+            function type() {
+                if (index < fullContent.length) {
+                    // Ajouter plusieurs caractères à la fois pour accélérer
+                    const chunkSize = 3;
+                    const chunk = fullContent.substring(index, index + chunkSize);
+                    terminal.innerHTML += chunk;
+                    index += chunkSize;
+                    
+                    // Faire défiler vers le bas
+                    window.scrollTo(0, document.body.scrollHeight);
+                    
+                    setTimeout(type, speed);
+                } else {
+                    // Afficher le curseur à la fin
+                    cursor.style.display = 'inline-block';
+                }
+            }
+            
+            type();
+        }
+
+        // Fonctions de navigation simulées
+        function navigateUp() {
+            alert('Navigation vers le répertoire parent...');
+        }
+
+        function navigateToDir(dirName) {
+            alert('Ouverture du répertoire: ' + dirName);
+        }
+
+        function openFile(fileName) {
+            alert('Ouverture du fichier: ' + fileName);
+        }
+
+        // Lancer l'animation au chargement
+        window.addEventListener('load', () => {
+            setTimeout(typeWriter, 500);
+        });
+
+        // Effet de scanlines CRT (optionnel)
+        const style = document.createElement('style');
+        style.textContent = `
+            body::before {
+                content: " ";
+                display: block;
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                right: 0;
+                background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+                z-index: 2;
+                background-size: 100% 2px, 3px 100%;
+                pointer-events: none;
+                opacity: 0.2;
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
