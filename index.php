@@ -1,315 +1,220 @@
+<?php
+// --- PARTIE LOGIQUE PHP ---
+
+// Fonction pour formater la taille des fichiers de manière lisible.
+function formatSizeUnits($bytes)
+{
+    if ($bytes >= 1073741824) {
+        $bytes = number_format($bytes / 1073741824, 2) . ' GB';
+    } elseif ($bytes >= 1048576) {
+        $bytes = number_format($bytes / 1048576, 2) . ' MB';
+    } elseif ($bytes >= 1024) {
+        $bytes = number_format($bytes / 1024, 2) . ' KB';
+    } elseif ($bytes > 1) {
+        $bytes = $bytes . ' bytes';
+    } elseif ($bytes == 1) {
+        $bytes = $bytes . ' byte';
+    } else {
+        $bytes = '0 bytes';
+    }
+    return $bytes;
+}
+
+// Définir le répertoire courant.
+$current_dir = '.';
+$items = scandir($current_dir);
+
+$dirs = [];
+$files = [];
+
+// Trier les éléments.
+foreach ($items as $item) {
+    if ($item === '.' || $item === basename(__FILE__)) continue;
+    if ($item === '..') continue;
+
+    if (is_dir($item)) {
+        $dirs[] = $item;
+    } else {
+        $files[] = $item;
+    }
+}
+
+sort($dirs);
+sort($files);
+
+// Construction de la sortie texte.
+$output = '';
+
+$output .= "
+    __  __ ___ ___ _  _   _   _  _ ___   _   
+   |  \/  | __/ __| || | /_\ | \| | __| /_\  
+   | |\/| | _| (__| __ |/ _ \| .` | _| / _ \ 
+   |_|  |_|___\___|_||_/_/ \_\_|\_|___/_/ \_\\
+   \n";
+$output .= "SYSTEM BOOT... OK\n";
+$output .= "DIRECTORY LISTING INITIALIZED.\n\n";
+
+$display_path = str_replace('\\', '/', getcwd());
+$prompt_path = "C:" . htmlspecialchars(substr($display_path, strrpos($display_path, '/') ?: ''));
+$output .= $prompt_path . "> dir\n\n";
+
+$output .= " Volume in drive C is LOCALHOST\n";
+$output .= " Directory of " . htmlspecialchars($display_path) . "\n\n";
+
+// Lien parent ".."
+$mtime_parent = date("d/m/Y  H:i", filemtime('..'));
+$output .= $mtime_parent . "    &lt;DIR&gt;          " . "         <a href=\"..\">..</a>\n";
+
+// Dossiers
+foreach ($dirs as $dir) {
+    $mtime = date("d/m/Y  H:i", filemtime($dir));
+    $dir_name = htmlspecialchars($dir);
+    $output .= $mtime . "    &lt;DIR&gt;          " . "         <a href=\"$dir_name/\">$dir_name/</a>\n";
+}
+
+// Fichiers
+foreach ($files as $file) {
+    $mtime = date("d/m/Y  H:i", filemtime($file));
+    $size = filesize($file);
+    $formatted_size = formatSizeUnits($size);
+    $file_name = htmlspecialchars($file);
+    
+    $padded_size = str_pad($formatted_size, 14, ' ', STR_PAD_LEFT);
+
+    $output .= $mtime . "                   " . $padded_size . " <a href=\"$file_name\">$file_name</a>\n";
+}
+
+$total_items = count($dirs) + count($files) + 1; // +1 pour ".."
+$output .= "\n               " . $total_items . " File(s)\n";
+$output .= "\n" . $prompt_path . ">";
+
+// Préparation de la chaîne pour JavaScript, en échappant les caractères spéciaux pour les template literals.
+$js_output = str_replace(['\\', '`', '${'], ['\\\\', '\\`', '\\${'], $output);
+
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terminal - localhost</title>
+    <title>Index of <?php echo htmlspecialchars(basename(getcwd())); ?></title>
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background-color: #000000;
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #000;
             color: #33FF33;
-            font-family: 'Consolas', 'Courier New', 'Lucida Console', monospace;
-            font-size: 14px;
-            line-height: 1.6;
-            overflow-x: auto;
-            min-height: 100vh;
-            position: relative;
+            font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
         }
-
-        /* Canvas pour la pluie numérique */
-        #matrix {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0.05;
-            z-index: 0;
-            pointer-events: none;
+        canvas#digital-rain {
+            position: fixed; top: 0; left: 0; z-index: 1; opacity: 0.2;
         }
-
-        /* Conteneur principal */
         #terminal {
-            position: relative;
-            z-index: 1;
-            padding: 20px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            position: relative; z-index: 2; font-size: 1rem; line-height: 1.4;
+            white-space: pre; /* Utiliser 'pre' pour un alignement strict */
+            padding: 15px; text-shadow: 0 0 3px rgba(51, 255, 51, 0.4);
         }
-
-        /* Effet de lueur subtile CRT */
-        #terminal-content {
-            text-shadow: 0 0 1px #33FF33;
+        #terminal a {
+            color: #33FF33; text-decoration: none;
         }
-
-        /* Liens */
-        a {
-            color: #33FF33;
-            text-decoration: none;
+        #terminal a:hover {
+            background-color: #33FF33; color: #000;
         }
-
-        a:hover {
-            color: #66FF66;
-            text-decoration: underline;
-        }
-
-        /* Curseur clignotant */
         .cursor {
-            display: inline-block;
-            width: 10px;
-            height: 18px;
+            display: inline-block; width: 10px; height: 1.2rem;
             background-color: #33FF33;
-            animation: blink 1s infinite;
-            vertical-align: text-bottom;
+            animation: blink 1s step-end infinite;
+            margin-left: 5px; vertical-align: bottom;
+            opacity: 0; /* Caché au début */
         }
-
-        @keyframes blink {
-            0%, 49% { opacity: 1; }
-            50%, 100% { opacity: 0; }
-        }
-
-        /* Animation de frappe */
-        .hidden {
-            display: none;
-        }
-
-        /* ASCII Art */
-        .ascii-art {
-            color: #00FF00;
-            margin-bottom: 20px;
-            font-size: 12px;
-            line-height: 1.2;
-        }
-
-        /* Header de commande */
-        .command-line {
-            color: #FFFFFF;
-            margin-bottom: 10px;
-        }
-
-        /* Colonnes alignées */
-        .file-entry {
-            display: inline-block;
-            width: 100%;
-        }
+        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
 <body>
-    <canvas id="matrix"></canvas>
-    <div id="terminal">
-        <pre id="terminal-content" class="hidden"></pre>
-        <span class="cursor" id="cursor"></span>
-    </div>
+    <canvas id="digital-rain"></canvas>
+    <pre id="terminal"><span id="output"></span><span class="cursor" id="cursor"></span></pre>
 
     <script>
-        // Pluie numérique en arrière-plan
-        const canvas = document.getElementById('matrix');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        const matrix = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789@#$%^&*()*&^%+-/~{[|`]}";
-        const matrixArray = matrix.split("");
-
-        const fontSize = 10;
-        const columns = canvas.width / fontSize;
-
-        const drops = [];
-        for(let x = 0; x < columns; x++) {
-            drops[x] = Math.floor(Math.random() * -100);
-        }
-
-        function drawMatrix() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = '#0F0';
-            ctx.font = fontSize + 'px monospace';
-
-            for(let i = 0; i < drops.length; i++) {
-                const text = matrixArray[Math.floor(Math.random() * matrixArray.length)];
-                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-
-                if(drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                    drops[i] = 0;
-                }
-                drops[i]++;
-            }
-        }
-
-        setInterval(drawMatrix, 35);
-
-        // Redimensionner le canvas
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
-
-        // Données simulées des fichiers (remplacer par des données réelles en PHP)
-        const fileSystem = {
-            currentPath: "C:\\xampp\\htdocs",
-            entries: [
-                { type: 'dir', name: '..', size: '', date: '01/01/2024  12:00' },
-                { type: 'dir', name: 'admin', size: '', date: '15/11/2024  09:30' },
-                { type: 'dir', name: 'assets', size: '', date: '20/11/2024  14:15' },
-                { type: 'dir', name: 'backup', size: '', date: '10/11/2024  08:45' },
-                { type: 'dir', name: 'config', size: '', date: '22/11/2024  16:20' },
-                { type: 'dir', name: 'database', size: '', date: '18/11/2024  11:00' },
-                { type: 'dir', name: 'includes', size: '', date: '21/11/2024  13:45' },
-                { type: 'dir', name: 'logs', size: '', date: '23/11/2024  17:30' },
-                { type: 'dir', name: 'modules', size: '', date: '19/11/2024  10:15' },
-                { type: 'dir', name: 'public', size: '', date: '24/11/2024  09:00' },
-                { type: 'dir', name: 'templates', size: '', date: '16/11/2024  15:30' },
-                { type: 'file', name: '.htaccess', size: '1.2 KB', date: '20/11/2024  10:00' },
-                { type: 'file', name: 'composer.json', size: '2.5 KB', date: '15/11/2024  14:30' },
-                { type: 'file', name: 'config.php', size: '4.8 KB', date: '22/11/2024  09:15' },
-                { type: 'file', name: 'database.sql', size: '156.3 KB', date: '18/11/2024  16:45' },
-                { type: 'file', name: 'favicon.ico', size: '15.1 KB', date: '10/11/2024  11:20' },
-                { type: 'file', name: 'functions.php', size: '23.7 KB', date: '21/11/2024  13:00' },
-                { type: 'file', name: 'LICENSE', size: '1.1 KB', date: '01/11/2024  08:00' },
-                { type: 'file', name: 'login.php', size: '8.9 KB', date: '23/11/2024  15:15' },
-                { type: 'file', name: 'logout.php', size: '2.1 KB', date: '23/11/2024  15:30' },
-                { type: 'file', name: 'README.md', size: '5.6 KB', date: '05/11/2024  12:00' },
-                { type: 'file', name: 'robots.txt', size: '0.8 KB', date: '08/11/2024  09:45' },
-                { type: 'file', name: 'style.css', size: '45.2 KB', date: '24/11/2024  10:30' }
-            ]
-        };
-
-        // Formater la liste des fichiers
-        function formatFileList() {
-            let output = '';
+        document.addEventListener('DOMContentLoaded', function() {
+            const outputElement = document.getElementById('output');
+            const cursorElement = document.getElementById('cursor');
             
-            // Séparer les dossiers et les fichiers
-            const dirs = fileSystem.entries.filter(e => e.type === 'dir');
-            const files = fileSystem.entries.filter(e => e.type === 'file');
-            
-            // Header de la liste
-            output += '\n Le volume dans le lecteur C n\'a pas de nom.\n';
-            output += ' Le numéro de série du volume est 4E9F-1A2B\n\n';
-            output += ' Répertoire de ' + fileSystem.currentPath + '\n\n';
-            
-            // Afficher les dossiers
-            dirs.forEach(dir => {
-                const dateStr = dir.date.padEnd(20);
-                const typeStr = '<DIR>'.padEnd(15);
-                if (dir.name === '..') {
-                    output += `${dateStr}${typeStr}<a href="#" onclick="navigateUp(); return false;">${dir.name}</a>\n`;
-                } else {
-                    output += `${dateStr}${typeStr}<a href="#" onclick="navigateToDir('${dir.name}'); return false;">${dir.name}</a>\n`;
-                }
-            });
-            
-            // Afficher les fichiers
-            files.forEach(file => {
-                const dateStr = file.date.padEnd(20);
-                const sizeStr = file.size.padStart(15);
-                output += `${dateStr}${sizeStr} <a href="#" onclick="openFile('${file.name}'); return false;">${file.name}</a>\n`;
-            });
-            
-            // Footer avec statistiques
-            const totalFiles = files.length;
-            const totalDirs = dirs.length - 1; // Exclure '..'
-            output += `\n              ${totalFiles} fichier(s)`;
-            output += `\n              ${totalDirs} répertoire(s)`;
-            output += '\n              2,147,483,648 octets libres\n';
-            
-            return output;
-        }
-
-        // ASCII Art
-        const asciiArt = `
-╔══════════════════════════════════════════════════════════════════════════╗
-║                                                                          ║
-║  ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗          ║
-║  ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║          ║
-║     ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║███████║██║          ║
-║     ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██╔══██║██║          ║
-║     ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║███████╗     ║
-║     ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝     ║
-║                                                                          ║
-║                    [ SYSTEM ACCESS GRANTED ]                            ║
-║                    [ ROOT PRIVILEGES ACTIVE ]                           ║
-║                                                                          ║
-╚══════════════════════════════════════════════════════════════════════════╝
-`;
-
-        // Contenu complet du terminal
-        const fullContent = asciiArt + '\n' + fileSystem.currentPath + '> dir' + formatFileList();
-
-        // Machine à écrire
-        function typeWriter() {
-            const terminal = document.getElementById('terminal-content');
-            const cursor = document.getElementById('cursor');
-            terminal.classList.remove('hidden');
+            // On utilise le texte préparé par PHP. C'est la correction clé.
+            const textToType = `<?php echo $js_output; ?>`;
             
             let index = 0;
-            const speed = 5; // Vitesse de frappe en ms
-            
+            const typingSpeed = 5;
+
             function type() {
-                if (index < fullContent.length) {
-                    // Ajouter plusieurs caractères à la fois pour accélérer
-                    const chunkSize = 3;
-                    const chunk = fullContent.substring(index, index + chunkSize);
-                    terminal.innerHTML += chunk;
-                    index += chunkSize;
+                if (index < textToType.length) {
+                    let char = textToType[index];
+
+                    // Si on rencontre une balise HTML ou une entité HTML...
+                    if (char === '<' || char === '&') {
+                        let endTagIndex;
+                        if (char === '<') {
+                            endTagIndex = textToType.indexOf('>', index); // Trouve la fin de la balise
+                        } else {
+                            endTagIndex = textToType.indexOf(';', index); // Trouve la fin de l'entité
+                        }
+
+                        if (endTagIndex !== -1) {
+                            // On extrait la balise/entité complète
+                            const fullTag = textToType.substring(index, endTagIndex + 1);
+                            outputElement.innerHTML += fullTag;
+                            index = endTagIndex; // On saute à la fin de la balise
+                        } else {
+                            outputElement.append(char); // Fallback
+                        }
+                    } else {
+                        // Sinon, on ajoute simplement le caractère (via .append pour éviter les problèmes d'interprétation HTML)
+                        outputElement.append(char);
+                    }
                     
-                    // Faire défiler vers le bas
+                    index++;
                     window.scrollTo(0, document.body.scrollHeight);
-                    
-                    setTimeout(type, speed);
+                    setTimeout(type, typingSpeed);
                 } else {
-                    // Afficher le curseur à la fin
-                    cursor.style.display = 'inline-block';
+                    // L'écriture est terminée, on affiche le curseur
+                    cursorElement.style.opacity = '1';
                 }
             }
             
             type();
-        }
 
-        // Fonctions de navigation simulées
-        function navigateUp() {
-            alert('Navigation vers le répertoire parent...');
-        }
+            // --- Animation Pluie Numérique ---
+            const canvas = document.getElementById('digital-rain');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const alphabet = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッンABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            const fontSize = 16;
+            const columns = canvas.width / fontSize;
+            const rainDrops = Array.from({ length: columns }).fill(1);
 
-        function navigateToDir(dirName) {
-            alert('Ouverture du répertoire: ' + dirName);
-        }
-
-        function openFile(fileName) {
-            alert('Ouverture du fichier: ' + fileName);
-        }
-
-        // Lancer l'animation au chargement
-        window.addEventListener('load', () => {
-            setTimeout(typeWriter, 500);
-        });
-
-        // Effet de scanlines CRT (optionnel)
-        const style = document.createElement('style');
-        style.textContent = `
-            body::before {
-                content: " ";
-                display: block;
-                position: fixed;
-                top: 0;
-                left: 0;
-                bottom: 0;
-                right: 0;
-                background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                z-index: 2;
-                background-size: 100% 2px, 3px 100%;
-                pointer-events: none;
-                opacity: 0.2;
+            function drawDigitalRain() {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#33FF33';
+                ctx.font = fontSize + 'px monospace';
+                rainDrops.forEach((y, i) => {
+                    const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                    ctx.fillText(text, i * fontSize, y * fontSize);
+                    if (y * fontSize > canvas.height && Math.random() > 0.975) {
+                        rainDrops[i] = 0;
+                    }
+                    rainDrops[i]++;
+                });
             }
-        `;
-        document.head.appendChild(style);
+            setInterval(drawDigitalRain, 35);
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                rainDrops.length = canvas.width / fontSize;
+                rainDrops.fill(1);
+            });
+        });
     </script>
 </body>
 </html>
