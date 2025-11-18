@@ -20,8 +20,10 @@ function scanProjects($wwwPath = 'C:\\laragon\\www') {
         // Obtenir la date de modification
         $lastModified = date('Y-m-d', filemtime($projectPath));
         
-        // Calculer la taille du dossier
-        $size = calculateDirectorySize($projectPath);
+        // Calculer la taille du dossier (désactivé par défaut pour performance)
+        // Décommentez la ligne suivante si vous voulez activer le calcul de taille
+        // $size = calculateDirectorySize($projectPath);
+        $size = 0; // Désactivé pour améliorer les performances
         
         $projects[] = [
             'name' => $item,
@@ -29,7 +31,7 @@ function scanProjects($wwwPath = 'C:\\laragon\\www') {
             'url' => 'http://localhost/' . $item,
             'status' => 'running',
             'lastModified' => $lastModified,
-            'size' => formatBytes($size),
+            'size' => $size > 0 ? formatBytes($size) : 'N/A',
             'path' => $projectPath
         ];
     }
@@ -130,21 +132,56 @@ function detectProjectType($projectPath) {
     return 'other';
 }
 
-// Fonction pour calculer la taille d'un répertoire
-function calculateDirectorySize($directory) {
+// Fonction pour calculer la taille d'un répertoire (optimisée avec limite)
+function calculateDirectorySize($directory, $maxDepth = 2, $excludedDirs = ['node_modules', 'vendor', '.git', 'storage']) {
     $size = 0;
-    if (is_dir($directory)) {
+    $depth = 0;
+    
+    if (!is_dir($directory)) {
+        return $size;
+    }
+    
+    try {
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
         );
         
+        // Limiter le nombre de fichiers traités pour éviter les timeouts
+        $fileCount = 0;
+        $maxFiles = 1000; // Limite de sécurité
+        
         foreach ($iterator as $file) {
+            // Limite de fichiers pour éviter les timeouts
+            if ($fileCount++ > $maxFiles) {
+                break;
+            }
+            
+            // Ignorer les dossiers exclus
+            $relativePath = str_replace($directory . '\\', '', $file->getPathname());
+            $pathParts = explode('\\', $relativePath);
+            
+            $shouldExclude = false;
+            foreach ($excludedDirs as $excluded) {
+                if (in_array($excluded, $pathParts)) {
+                    $shouldExclude = true;
+                    break;
+                }
+            }
+            
+            if ($shouldExclude) {
+                continue;
+            }
+            
             if ($file->isFile()) {
                 $size += $file->getSize();
             }
         }
+    } catch (Exception $e) {
+        // En cas d'erreur, retourner 0 plutôt que de planter
+        return 0;
     }
+    
     return $size;
 }
 
@@ -163,6 +200,9 @@ function formatBytes($bytes, $precision = 2) {
 
 // Si c'est une requête AJAX pour obtenir les projets
 if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
+    // Limiter le temps d'exécution pour éviter les timeouts
+    set_time_limit(10); // Maximum 10 secondes
+    
     header('Content-Type: application/json');
     $wwwPath = isset($_GET['path']) ? $_GET['path'] : 'C:\\laragon\\www';
     echo json_encode(scanProjects($wwwPath));
@@ -409,6 +449,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
     <script>
         // Projects will be loaded dynamically from the actual www folder
         let projects = [];
+        let memoryInterval = null; // Pour nettoyer l'intervalle
+        const MAX_LOG_ENTRIES = 50; // Limite le nombre de logs
 
         // Function to load projects from directory listing via PHP
         async function loadProjectsFromDirectory() {
@@ -433,12 +475,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
             renderProjects();
         }
 
-        // Matrix rain effect
+        // Matrix rain effect (vérifie qu'il n'y a pas déjà des éléments)
         function createMatrixRain() {
             const container = document.getElementById('matrixBg');
+            // Nettoyer les anciens éléments s'ils existent
+            container.innerHTML = '';
+            
             const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
             
-            for (let i = 0; i < 50; i++) {
+            // Réduire le nombre d'éléments pour améliorer les performances
+            for (let i = 0; i < 30; i++) {
                 const span = document.createElement('span');
                 span.className = 'matrix-rain';
                 span.style.left = Math.random() * 100 + '%';
@@ -446,7 +492,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
                 span.style.animationDelay = Math.random() * 20 + 's';
                 
                 let text = '';
-                for (let j = 0; j < 20; j++) {
+                for (let j = 0; j < 15; j++) {
                     text += chars[Math.floor(Math.random() * chars.length)] + '<br>';
                 }
                 span.innerHTML = text;
@@ -526,12 +572,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
             }
         }
 
-        // Add log entry
+        // Add log entry (avec limitation pour éviter l'accumulation)
         function addLog(message) {
             const log = document.getElementById('terminalLog');
             const entry = document.createElement('div');
             entry.textContent = message;
             log.appendChild(entry);
+            
+            // Limiter le nombre de logs pour éviter l'accumulation mémoire
+            // Compter tous les divs (y compris ceux initiaux)
+            const logEntries = log.querySelectorAll('div');
+            if (logEntries.length > MAX_LOG_ENTRIES) {
+                // Supprimer les anciens logs (garder les plus récents)
+                const toRemove = logEntries.length - MAX_LOG_ENTRIES;
+                for (let i = 0; i < toRemove; i++) {
+                    logEntries[i].remove();
+                }
+            }
+            
             log.scrollTop = log.scrollHeight;
         }
 
@@ -565,14 +623,30 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
             }
         }
 
-        // Simulate system status updates
-        setInterval(() => {
-            document.getElementById('memoryUsage').textContent = 
-                Math.floor(Math.random() * 50 + 100) + 'MB';
-        }, 3000);
+        // Simulate system status updates (réduit la fréquence et nettoyable)
+        function startMemoryUpdate() {
+            if (memoryInterval) {
+                clearInterval(memoryInterval);
+            }
+            memoryInterval = setInterval(() => {
+                const memoryEl = document.getElementById('memoryUsage');
+                if (memoryEl) {
+                    memoryEl.textContent = Math.floor(Math.random() * 50 + 100) + 'MB';
+                }
+            }, 15000); // 15 secondes pour réduire la charge
+        }
+
+        // Nettoyer les ressources lors du déchargement de la page
+        window.addEventListener('beforeunload', () => {
+            if (memoryInterval) {
+                clearInterval(memoryInterval);
+                memoryInterval = null;
+            }
+        });
 
         // Initialize
         createMatrixRain();
+        startMemoryUpdate();
         
         // Load projects from directory on startup
         (async function() {
@@ -587,10 +661,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
             }, 2000);
         })();
         
-        // Auto-scan for new projects every 30 seconds
-        setInterval(() => {
-            scanForProjects();
-        }, 30000);
+        // Auto-scan désactivé par défaut pour éviter les problèmes de performance
+        // Décommentez les lignes suivantes si vous voulez activer l'auto-scan
+        // setInterval(() => {
+        //     scanForProjects();
+        // }, 300000); // 5 minutes au lieu de 30 secondes
     </script>
 </body>
 </html>
