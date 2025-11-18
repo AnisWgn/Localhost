@@ -327,7 +327,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'getProjects') {
             </div>
             <div class="project-card p-4 rounded">
                 <div class="text-xs opacity-70 mb-1">[PHP VERSION]</div>
-                <div class="text-xl font-bold">PHP 8.1.10</div>
+                <div class="text-xl font-bold"><?php echo phpversion(); ?></div>
                 <div class="text-xs mt-2">Memory: <span id="memoryUsage">128MB</span></div>
             </div>
         </div>
